@@ -2,3 +2,5 @@
 *.csv
 *.parquet
 .env
+**/gen/schemas
+**/gen/schemas

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "plot_data",
+  "version": "0.1.0",
+  "identifier": "com.bobbicknell.weatheranalysis.plotdata",
+  "build": {
+    "frontendDist": "../src"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "Weather Data Explorer",
+        "width": 1000,
+        "height": 700
+      }
+    ]
+  }
+}

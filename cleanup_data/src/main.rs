@@ -1,5 +1,8 @@
 //! Reads every CSV file in ../Data (produced by pull_data) and combines them
-//! into a single Parquet file, also written to ../Data.
+//! into a single Parquet file, written to the user's config directory
+//! (~/.config/RobertBicknell/Weatheranalysis/weather_all.parquet on Linux)
+//! rather than the project tree, so it survives independently of wherever
+//! the repo happens to be checked out.
 //!
 //! Each input CSV is expected to have the columns: date, datatype, station, value
 //! (the long/tidy format written by pull_data). Files are simply stacked on
@@ -11,7 +14,22 @@ use polars::prelude::*;
 use std::path::PathBuf;
 
 const DATA_DIR: &str = "../Data";
-const OUTFILE: &str = "../Data/weather_all.parquet";
+
+/// Resolves to ~/.config/RobertBicknell/Weatheranalysis (on Linux/macOS via
+/// XDG_CONFIG_HOME or ~/.config; %APPDATA%\RobertBicknell\Weatheranalysis
+/// on Windows). Can be overridden with WEATHER_DATA_PATH (set to the full
+/// file path, not just the directory) if you want the Parquet file
+/// somewhere else -- plot_data respects the same override.
+fn output_path() -> PolarsResult<PathBuf> {
+    if let Ok(p) = std::env::var("WEATHER_DATA_PATH") {
+        return Ok(PathBuf::from(p));
+    }
+    let config_dir = dirs::config_dir()
+        .ok_or_else(|| PolarsError::ComputeError("could not resolve config directory".into()))?;
+    let dir = config_dir.join("RobertBicknell").join("Weatheranalysis");
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir.join("weather_all.parquet"))
+}
 
 fn main() -> PolarsResult<()> {
     let pattern = format!("{DATA_DIR}/*.csv");
@@ -46,9 +64,11 @@ fn main() -> PolarsResult<()> {
     let mut df = combined.collect()?;
     println!("Combined shape: {:?}", df.shape());
 
-    let mut file = std::fs::File::create(OUTFILE)?;
+    let outfile = output_path()?;
+    let mut file = std::fs::File::create(&outfile)?;
     ParquetWriter::new(&mut file).finish(&mut df)?;
 
-    println!("Wrote {} rows to {}", df.height(), OUTFILE);
+    println!("Wrote {} rows to {}", df.height(), outfile.display());
     Ok(())
 }
+

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Weather Data Explorer</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <h1>Weather Data Explorer</h1>
+
+  <div class="controls">
+    <label for="datatype">Field</label>
+    <select id="datatype"></select>
+
+    <label for="station">City</label>
+    <select id="station">
+      <option value="">All</option>
+    </select>
+  </div>
+
+  <div id="chart"></div>
+
+  <script type="module" src="api.js"></script>
+  <script type="module" src="main.js"></script>
+</body>
+</html>
