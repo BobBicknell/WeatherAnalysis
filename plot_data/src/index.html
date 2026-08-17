@@ -9,17 +9,40 @@
 <body>
   <h1>Weather Data Explorer</h1>
 
-  <div class="controls">
-    <label for="datatype">Field</label>
-    <select id="datatype"></select>
-
-    <label for="station">City</label>
-    <select id="station">
-      <option value="">All</option>
-    </select>
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="daily">Daily</button>
+    <button class="tab-btn" data-tab="trends">Trends</button>
   </div>
 
-  <div id="chart"></div>
+  <div id="daily-view" class="view">
+    <div class="controls">
+      <label for="datatype">Field</label>
+      <select id="datatype"></select>
+
+      <label for="station">City</label>
+      <select id="station">
+        <option value="">All</option>
+      </select>
+    </div>
+    <div id="chart"></div>
+  </div>
+
+  <div id="trends-view" class="view hidden">
+    <div class="controls">
+      <label for="trend-period">Average by</label>
+      <select id="trend-period">
+        <option value="monthly">Month</option>
+        <option value="yearly">Year</option>
+      </select>
+
+      <label for="trend-station">City</label>
+      <select id="trend-station">
+        <option value="">All</option>
+      </select>
+    </div>
+    <p class="hint">Mean daily temperature, (TMAX + TMIN) / 2, averaged over each period -- smooths out day-to-day noise so longer-term trends are easier to see.</p>
+    <div id="trend-chart"></div>
+  </div>
 
   <script type="module" src="api.js"></script>
   <script type="module" src="main.js"></script>

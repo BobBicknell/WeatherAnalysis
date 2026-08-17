@@ -101,8 +101,6 @@ pub fn get_datatypes() -> PolarsResult<Vec<String>> {
 /// When `station` is None ("All"), returns one series per station so the
 /// caller can plot them as separate traces.
 pub fn get_series(datatype: &str, station: Option<&str>) -> PolarsResult<Vec<StationSeries>> {
-    let names = station_names();
-
     let mut lf = load_df()?.filter(col("datatype").eq(lit(datatype)));
     if let Some(s) = station {
         lf = lf.filter(col("station").eq(lit(s)));
@@ -113,8 +111,59 @@ pub fn get_series(datatype: &str, station: Option<&str>) -> PolarsResult<Vec<Sta
         .sort(["station", "date"], SortMultipleOptions::default())
         .collect()?;
 
+    group_into_series(&df, "date")
+}
+
+/// Monthly or yearly average of (TMAX + TMIN) / 2 -- a much smoother trend
+/// line than plotting daily TMAX/TMIN directly, which is dominated by
+/// day-to-day noise. `period` is "monthly" or "yearly"; anything else
+/// defaults to monthly. Optionally filtered to a single station.
+pub fn get_mean_temp_trend(period: &str, station: Option<&str>) -> PolarsResult<Vec<StationSeries>> {
+    let base = load_df()?;
+
+    let mut tmax = base
+        .clone()
+        .filter(col("datatype").eq(lit("TMAX")))
+        .select([col("station"), col("date"), col("value").alias("tmax")]);
+    let mut tmin = base
+        .filter(col("datatype").eq(lit("TMIN")))
+        .select([col("station"), col("date"), col("value").alias("tmin")]);
+
+    if let Some(s) = station {
+        tmax = tmax.filter(col("station").eq(lit(s)));
+        tmin = tmin.filter(col("station").eq(lit(s)));
+    }
+
+    // Dates are stored as "YYYY-MM-DD"; slice to "YYYY" for yearly buckets
+    // or "YYYY-MM" for monthly buckets.
+    let period_len: i64 = if period == "yearly" { 4 } else { 7 };
+
+    let df = tmax
+        .join(
+            tmin,
+            [col("station"), col("date")],
+            [col("station"), col("date")],
+            JoinArgs::new(JoinType::Inner),
+        )
+        .with_columns([
+            ((col("tmax") + col("tmin")) / lit(2.0)).alias("mean_temp"),
+            col("date").str().slice(lit(0), lit(period_len)).alias("period"),
+        ])
+        .group_by([col("station"), col("period")])
+        .agg([col("mean_temp").mean().alias("value")])
+        .sort(["station", "period"], SortMultipleOptions::default())
+        .collect()?;
+
+    group_into_series(&df, "period")
+}
+
+/// Shared helper: turns a DataFrame with columns [station, <date_col>, value]
+/// into one StationSeries per distinct station.
+fn group_into_series(df: &DataFrame, date_col_name: &str) -> PolarsResult<Vec<StationSeries>> {
+    let names = station_names();
+
     let station_col = df.column("station")?.str()?;
-    let date_col = df.column("date")?.str()?;
+    let date_col = df.column(date_col_name)?.str()?;
     let value_col = df.column("value")?.f64()?;
 
     let mut grouped: HashMap<String, Vec<SeriesPoint>> = HashMap::new();

@@ -15,6 +15,11 @@ fn get_series(datatype: String, station: Option<String>) -> Result<Vec<data::Sta
     data::get_series(&datatype, station.as_deref()).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn get_mean_temp_trend(period: String, station: Option<String>) -> Result<Vec<data::StationSeries>, String> {
+    data::get_mean_temp_trend(&period, station.as_deref()).map_err(|e| e.to_string())
+}
+
 fn main() {
     // Surface the resolved data path at startup so a missing/misplaced
     // Parquet file shows up immediately in the terminal instead of as a
@@ -31,7 +36,12 @@ fn main() {
     }
 
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![get_stations, get_datatypes, get_series])
+        .invoke_handler(tauri::generate_handler![
+            get_stations,
+            get_datatypes,
+            get_series,
+            get_mean_temp_trend
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

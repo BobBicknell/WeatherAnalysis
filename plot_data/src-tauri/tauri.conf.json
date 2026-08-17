@@ -10,9 +10,11 @@
     "withGlobalTauri": true,
     "windows": [
       {
+        "label": "main",
         "title": "Weather Data Explorer",
         "width": 1000,
-        "height": 700
+        "height": 700,
+        "url": "index.html"
       }
     ]
   }
