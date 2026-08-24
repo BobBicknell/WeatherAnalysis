@@ -28,6 +28,7 @@ pub struct StationInfo {
 pub struct SeriesPoint {
     pub date: String,
     pub value: f64,
+    pub avg: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -61,6 +62,27 @@ pub fn resolved_data_path() -> PathBuf {
 
 fn load_df() -> PolarsResult<LazyFrame> {
     LazyFrame::scan_parquet(data_path(), ScanArgsParquet::default())
+}
+
+/// Adds an "avg_value" column: a centered rolling mean of "value" over
+/// `window` rows, computed independently per "station". Requires the frame
+/// already be sorted by (station, date/period) -- both callers below are.
+/// `center: true` avoids the phase lag a trailing average would introduce,
+/// appropriate here since this is historical (not live/streaming) data.
+/// `min_periods: 1` keeps the line defined at the edges instead of gapping.
+fn with_rolling_avg(lf: LazyFrame, window: i64) -> LazyFrame {
+    lf.with_column(
+        col("value")
+            .rolling_mean(RollingOptionsFixedWindow {
+                window_size: window as usize,
+                min_periods: 1,
+                weights: None,
+                center: true,
+                fn_params: None,
+            })
+            .over([col("station")])
+            .alias("avg_value"),
+    )
 }
 
 /// All distinct stations present in the data, with friendly names where known.
@@ -100,16 +122,26 @@ pub fn get_datatypes() -> PolarsResult<Vec<String>> {
 /// Time series for one datatype, optionally filtered to a single station.
 /// When `station` is None ("All"), returns one series per station so the
 /// caller can plot them as separate traces.
-pub fn get_series(datatype: &str, station: Option<&str>) -> PolarsResult<Vec<StationSeries>> {
+pub fn get_series(
+    datatype: &str,
+    station: Option<&str>,
+    window: Option<i64>,
+) -> PolarsResult<Vec<StationSeries>> {
     let mut lf = load_df()?.filter(col("datatype").eq(lit(datatype)));
     if let Some(s) = station {
         lf = lf.filter(col("station").eq(lit(s)));
     }
 
-    let df = lf
+    let mut lf = lf
         .select([col("station"), col("date"), col("value")])
-        .sort(["station", "date"], SortMultipleOptions::default())
-        .collect()?;
+        .sort(["station", "date"], SortMultipleOptions::default());
+    if let Some(w) = window {
+        if w > 1 {
+            lf = with_rolling_avg(lf, w);
+        }
+    }
+
+    let df = lf.collect()?;
 
     group_into_series(&df, "date")
 }
@@ -118,7 +150,11 @@ pub fn get_series(datatype: &str, station: Option<&str>) -> PolarsResult<Vec<Sta
 /// line than plotting daily TMAX/TMIN directly, which is dominated by
 /// day-to-day noise. `period` is "monthly" or "yearly"; anything else
 /// defaults to monthly. Optionally filtered to a single station.
-pub fn get_mean_temp_trend(period: &str, station: Option<&str>) -> PolarsResult<Vec<StationSeries>> {
+pub fn get_mean_temp_trend(
+    period: &str,
+    station: Option<&str>,
+    window: Option<i64>,
+) -> PolarsResult<Vec<StationSeries>> {
     let base = load_df()?;
 
     let mut tmax = base
@@ -138,7 +174,7 @@ pub fn get_mean_temp_trend(period: &str, station: Option<&str>) -> PolarsResult<
     // or "YYYY-MM" for monthly buckets.
     let period_len: i64 = if period == "yearly" { 4 } else { 7 };
 
-    let df = tmax
+    let mut lf = tmax
         .join(
             tmin,
             [col("station"), col("date")],
@@ -151,8 +187,14 @@ pub fn get_mean_temp_trend(period: &str, station: Option<&str>) -> PolarsResult<
         ])
         .group_by([col("station"), col("period")])
         .agg([col("mean_temp").mean().alias("value")])
-        .sort(["station", "period"], SortMultipleOptions::default())
-        .collect()?;
+        .sort(["station", "period"], SortMultipleOptions::default());
+    if let Some(w) = window {
+        if w > 1 {
+            lf = with_rolling_avg(lf, w);
+        }
+    }
+
+    let df = lf.collect()?;
 
     group_into_series(&df, "period")
 }
@@ -165,13 +207,15 @@ fn group_into_series(df: &DataFrame, date_col_name: &str) -> PolarsResult<Vec<St
     let station_col = df.column("station")?.str()?;
     let date_col = df.column(date_col_name)?.str()?;
     let value_col = df.column("value")?.f64()?;
+    let avg_col = df.column("avg_value").ok().and_then(|c| c.f64().ok());
 
     let mut grouped: HashMap<String, Vec<SeriesPoint>> = HashMap::new();
     for i in 0..df.height() {
         let st = station_col.get(i).unwrap_or_default().to_string();
         let date = date_col.get(i).unwrap_or_default().to_string();
         let value = value_col.get(i).unwrap_or(f64::NAN);
-        grouped.entry(st).or_default().push(SeriesPoint { date, value });
+        let avg = avg_col.and_then(|c| c.get(i));
+        grouped.entry(st).or_default().push(SeriesPoint { date, value, avg });
     }
 
     let mut result: Vec<StationSeries> = grouped

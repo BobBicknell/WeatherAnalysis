@@ -11,13 +11,21 @@ fn get_datatypes() -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
-fn get_series(datatype: String, station: Option<String>) -> Result<Vec<data::StationSeries>, String> {
-    data::get_series(&datatype, station.as_deref()).map_err(|e| e.to_string())
+fn get_series(
+    datatype: String,
+    station: Option<String>,
+    window: Option<i64>,
+) -> Result<Vec<data::StationSeries>, String> {
+    data::get_series(&datatype, station.as_deref(), window).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn get_mean_temp_trend(period: String, station: Option<String>) -> Result<Vec<data::StationSeries>, String> {
-    data::get_mean_temp_trend(&period, station.as_deref()).map_err(|e| e.to_string())
+fn get_mean_temp_trend(
+    period: String,
+    station: Option<String>,
+    window: Option<i64>,
+) -> Result<Vec<data::StationSeries>, String> {
+    data::get_mean_temp_trend(&period, station.as_deref(), window).map_err(|e| e.to_string())
 }
 
 fn main() {

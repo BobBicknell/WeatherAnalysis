@@ -29,6 +29,15 @@ Tauri app that plots weather data from `../Data/weather_all.parquet`
   from a small lookup table in `data.rs`. "All" (empty selection) plots
   every station as a separate line.
 
+## Moving average
+
+Both the Daily and Trends views have a "Moving avg" number input (days for
+Daily, periods/months-or-years for Trends). Setting it to a value > 1 adds a
+dashed overlay line per station: a centered rolling mean of `value`
+computed server-side via polars `rolling_mean` (`with_rolling_avg` in
+`data.rs`), partitioned per station with `.over()`. Leaving it blank/0 keeps
+the current raw-only behavior.
+
 ## Setup
 
 Requires the Tauri CLI:

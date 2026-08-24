@@ -14,10 +14,10 @@ export async function getDatatypes() {
   return invoke("get_datatypes");
 }
 
-export async function getSeries(datatype, station) {
-  return invoke("get_series", { datatype, station: station || null });
+export async function getSeries(datatype, station, window) {
+  return invoke("get_series", { datatype, station: station || null, window: window || null });
 }
 
-export async function getMeanTempTrend(period, station) {
-  return invoke("get_mean_temp_trend", { period, station: station || null });
+export async function getMeanTempTrend(period, station, window) {
+  return invoke("get_mean_temp_trend", { period, station: station || null, window: window || null });
 }

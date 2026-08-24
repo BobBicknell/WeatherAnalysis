@@ -1,5 +1,45 @@
 import { getStations, getDatatypes, getSeries, getMeanTempTrend } from "./api.js";
 
+// Fixed categorical order (dataviz skill's validated palette) -- assigned
+// by station index, never cycled/reassigned, so a station keeps its color
+// whether its raw line is shown alone or paired with a moving-average
+// overlay in the same hue.
+const PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"];
+
+function seriesToTraces(series, avgLabel, rawMode = "lines", showRaw = true) {
+  const traces = [];
+  series.forEach((s, i) => {
+    const color = PALETTE[i % PALETTE.length];
+    if (showRaw) {
+      traces.push({
+        x: s.points.map((p) => p.date),
+        y: s.points.map((p) => p.value),
+        name: s.station_name,
+        mode: rawMode,
+        type: "scatter",
+        line: { color, width: 2 },
+        marker: { color },
+      });
+    }
+    if (s.points.some((p) => p.avg != null)) {
+      traces.push({
+        x: s.points.map((p) => p.date),
+        y: s.points.map((p) => p.avg),
+        name: `${s.station_name} ${avgLabel}`,
+        mode: "lines",
+        type: "scatter",
+        line: { color, width: 5, dash: "dash" },
+      });
+    }
+  });
+  return traces;
+}
+
+function parseWindow(input) {
+  const n = parseInt(input.value, 10);
+  return Number.isFinite(n) && n > 1 ? n : null;
+}
+
 // ---- Tab switching ----
 
 const tabButtons = document.querySelectorAll(".tab-btn");
@@ -26,6 +66,8 @@ tabButtons.forEach((btn) => {
 
 const datatypeSelect = document.getElementById("datatype");
 const stationSelect = document.getElementById("station");
+const dailyWindowInput = document.getElementById("daily-window");
+const dailyShowRaw = document.getElementById("daily-show-raw");
 
 async function initDaily(datatypes, stations) {
   datatypeSelect.innerHTML = datatypes.map((d) => `<option value="${d}">${d}</option>`).join("");
@@ -43,15 +85,10 @@ async function initDaily(datatypes, stations) {
 async function renderDaily() {
   const datatype = datatypeSelect.value;
   const station = stationSelect.value; // "" means All
-  const series = await getSeries(datatype, station);
+  const window = parseWindow(dailyWindowInput);
+  const series = await getSeries(datatype, station, window);
 
-  const traces = series.map((s) => ({
-    x: s.points.map((p) => p.date),
-    y: s.points.map((p) => p.value),
-    name: s.station_name,
-    mode: "lines",
-    type: "scatter",
-  }));
+  const traces = seriesToTraces(series, `(${window}-day avg)`, "lines", dailyShowRaw.checked);
 
   Plotly.newPlot(
       "chart",
@@ -69,11 +106,15 @@ async function renderDaily() {
 
 datatypeSelect.addEventListener("change", renderDaily);
 stationSelect.addEventListener("change", renderDaily);
+dailyWindowInput.addEventListener("input", renderDaily);
+dailyShowRaw.addEventListener("change", renderDaily);
 
 // ---- Trends view ----
 
 const trendPeriodSelect = document.getElementById("trend-period");
 const trendStationSelect = document.getElementById("trend-station");
+const trendWindowInput = document.getElementById("trend-window");
+const trendShowRaw = document.getElementById("trend-show-raw");
 
 async function initTrends(stations) {
   for (const s of stations) {
@@ -88,15 +129,10 @@ async function initTrends(stations) {
 async function renderTrends() {
   const period = trendPeriodSelect.value;
   const station = trendStationSelect.value; // "" means All
-  const series = await getMeanTempTrend(period, station);
+  const window = parseWindow(trendWindowInput);
+  const series = await getMeanTempTrend(period, station, window);
 
-  const traces = series.map((s) => ({
-    x: s.points.map((p) => p.date),
-    y: s.points.map((p) => p.value),
-    name: s.station_name,
-    mode: "lines+markers",
-    type: "scatter",
-  }));
+  const traces = seriesToTraces(series, `(${window}-period avg)`, "lines+markers", trendShowRaw.checked);
 
   Plotly.newPlot(
       "trend-chart",
@@ -114,6 +150,8 @@ async function renderTrends() {
 
 trendPeriodSelect.addEventListener("change", renderTrends);
 trendStationSelect.addEventListener("change", renderTrends);
+trendWindowInput.addEventListener("input", renderTrends);
+trendShowRaw.addEventListener("change", renderTrends);
 
 // ---- Init ----
 

@@ -10,5 +10,5 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-polars = { version = "0.44", features = ["lazy", "parquet", "strings"] }
+polars = { version = "0.44", features = ["lazy", "parquet", "strings", "rolling_window"] }
 dirs = "5"
