@@ -14,10 +14,33 @@ export async function getDatatypes() {
   return invoke("get_datatypes");
 }
 
-export async function getSeries(datatype, station, window) {
-  return invoke("get_series", { datatype, station: station || null, window: window || null });
+export async function getSeries(datatype, station, window, lowPass) {
+  return invoke("get_series", {
+    datatype,
+    station: station || null,
+    window: window || null,
+    lowPass: lowPass || null,
+  });
 }
 
-export async function getMeanTempTrend(period, station, window) {
-  return invoke("get_mean_temp_trend", { period, station: station || null, window: window || null });
+export async function getMeanTempTrend(period, station, window, lowPass) {
+  return invoke("get_mean_temp_trend", {
+    period,
+    station: station || null,
+    window: window || null,
+    lowPass: lowPass || null,
+  });
+}
+
+export async function getHotDaysPerYear(threshold, station) {
+  return invoke("get_hot_days_per_year", {
+    threshold,
+    station: station || null,
+  });
+}
+
+export async function getGrowingSeason(station) {
+  return invoke("get_growing_season", {
+    station: station || null,
+  });
 }
