@@ -1,4 +1,4 @@
-http://bicknellfamily.duckdns.org {
+bicknellfamily.duckdns.org {
     @bare path_regexp ^/CorvallisWeather$
     redir @bare /CorvallisWeather/ permanent
     @sub path_regexp ^/CorvallisWeather/

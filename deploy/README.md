@@ -1,10 +1,12 @@
 # Deployment
 
 Serves the weather plots app at
-`http://bicknellfamily.duckdns.org/CorvallisWeather/`, using a path prefix on
-port 80 instead of a separate port. Caddy strips the
-`/CorvallisWeather` prefix and proxies to the Rust server on
-`127.0.0.1:9002`; paths outside it get a 404.
+`https://bicknellfamily.duckdns.org/CorvallisWeather/`, using a path prefix
+instead of a separate port. Caddy handles automatic HTTPS (Let's Encrypt via
+the DuckDNS domain, HTTP-01 challenge over port 80) and strips the
+`/CorvallisWeather` prefix before proxying to the Rust server on
+`127.0.0.1:9002`; paths outside it get a 404. Plain HTTP requests are
+redirected to HTTPS automatically.
 
 ## Layout
 
@@ -41,8 +43,11 @@ per request.)
 
 ## Manual steps you still owe
 
-- **Router**: forward TCP port **80** to this machine if it isn't already
-  (the existing Mealie/8083 ports forward the *other* public ports).
+- **Router**: forward TCP ports **80** and **443** to this machine if they
+  aren't already (the existing Mealie/8083 ports forward the *other* public
+  ports). Port 80 is required even though the site serves HTTPS — Caddy uses
+  it for the Let's Encrypt HTTP-01 challenge and to redirect plain-HTTP
+  requests.
 - **DNS**: `bicknellfamily.duckdns.org` already resolves to this box.
 
 ## Uninstall
@@ -50,9 +55,3 @@ per request.)
 ```
 sudo ./deploy/uninstall.sh
 ```
-
-## Future: HTTPS
-
-When you want TLS, change the site address from `http://…` to `https://…`
-(or drop the scheme) and forward port 443; Caddy then issues a DuckDNS
-Let's Encrypt cert automatically.

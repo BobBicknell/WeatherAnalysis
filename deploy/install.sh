@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Enable the weather plots web app at http://bicknellfamily.duckdns.org/CorvallisWeather/
+# Enable the weather plots web app at https://bicknellfamily.duckdns.org/CorvallisWeather/
 # Requires the release build to exist first:
 #   cd plot_data/server && cargo build --release
 # Then run from the repo root with sudo:
@@ -16,7 +16,7 @@ cp "$REPO/plot_data/server/target/release/weather-server" "$BIN"
 echo ">> Installing systemd unit"
 cp "$REPO/deploy/weather-plot.service" "$UNIT"
 
-echo ">> Registering Caddy site http://bicknellfamily.duckdns.org/CorvallisWeather/"
+echo ">> Registering Caddy site https://bicknellfamily.duckdns.org/CorvallisWeather/"
 if grep -q 'CorvallisWeather' /etc/caddy/Caddyfile; then
     echo "   CorvallisWeather block already present; leaving Caddyfile untouched"
 else

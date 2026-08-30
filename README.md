@@ -5,7 +5,7 @@ fetched from NOAA's Climate Data Online (CDO) API, combined into a single
 Parquet file, and visualized as a Tauri desktop app **and** as a web app
 served from this machine.
 
-Public web app: `http://bicknellfamily.duckdns.org/CorvallisWeather/`
+Public web app: `https://bicknellfamily.duckdns.org/CorvallisWeather/`
 
 ## Repository layout
 
