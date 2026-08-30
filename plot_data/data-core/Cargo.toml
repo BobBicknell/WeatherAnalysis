@@ -1,6 +1,6 @@
 [package]
 name = "plot-data-core"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Query layer over the combined weather Parquet file, shared by the Tauri desktop app and the web server"
 

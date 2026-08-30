@@ -6,6 +6,8 @@ commit date; `Unreleased` covers work in the working tree not yet committed.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-30
+
 ### Added
 - **Web server** (`plot_data/server/`): Axum HTTP server exposing the same
   queries the desktop app uses as REST endpoints (`/api/stations`,
@@ -75,3 +77,6 @@ Initial release.
   (`ewm_mean` forward + backward per station).
 - Vendored Plotly.js so the app needs no internet at runtime.
 - READMEs for the pipeline and the viewer.
+
+[Unreleased]: https://github.com/BobBicknell/WeatherAnalysis/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/BobBicknell/WeatherAnalysis/releases/tag/v0.2.0

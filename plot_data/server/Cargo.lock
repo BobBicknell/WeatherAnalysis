@@ -1643,7 +1643,7 @@ dependencies = [
 
 [[package]]
 name = "plot-data-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "dirs",
  "polars",
@@ -3481,7 +3481,7 @@ dependencies = [
 
 [[package]]
 name = "weather-server"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "axum",
  "plot-data-core",

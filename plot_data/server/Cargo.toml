@@ -1,6 +1,6 @@
 [package]
 name = "weather-server"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "HTTP server for the weather plots frontend, sharing the query core with the Tauri app"
 
