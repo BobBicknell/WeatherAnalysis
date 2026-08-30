@@ -63,7 +63,10 @@ pub fn resolved_data_path() -> PathBuf {
 }
 
 fn load_df() -> PolarsResult<LazyFrame> {
-    LazyFrame::scan_parquet(data_path(), ScanArgsParquet::default())
+    LazyFrame::scan_parquet(
+        PlRefPath::from(data_path().to_string_lossy().as_ref()),
+        ScanArgsParquet::default(),
+    )
 }
 
 /// Adds an "avg_value" column: a centered rolling mean of "value" over
@@ -72,8 +75,8 @@ fn load_df() -> PolarsResult<LazyFrame> {
 /// `center: true` avoids the phase lag a trailing average would introduce,
 /// appropriate here since this is historical (not live/streaming) data.
 /// `min_periods: 1` keeps the line defined at the edges instead of gapping.
-fn with_rolling_avg(lf: LazyFrame, window: i64) -> LazyFrame {
-    lf.with_column(
+fn with_rolling_avg(lf: LazyFrame, window: i64) -> PolarsResult<LazyFrame> {
+    Ok(lf.with_column(
         col("value")
             .rolling_mean(RollingOptionsFixedWindow {
                 window_size: window as usize,
@@ -82,9 +85,9 @@ fn with_rolling_avg(lf: LazyFrame, window: i64) -> LazyFrame {
                 center: true,
                 fn_params: None,
             })
-            .over([col("station")])
+            .over([col("station")])?
             .alias("avg_value"),
-    )
+    ))
 }
 
 /// Adds an "lpf_value" column: a zero-phase exponential low-pass filter of
@@ -97,7 +100,7 @@ fn with_rolling_avg(lf: LazyFrame, window: i64) -> LazyFrame {
 /// makes both passes identical recursions (seeded with their own endpoint),
 /// so the composite response is exactly symmetric; each edge degrades into
 /// a plain one-sided EMA anchored at its end of the series.
-fn with_low_pass(lf: LazyFrame, span: i64) -> LazyFrame {
+fn with_low_pass(lf: LazyFrame, span: i64) -> PolarsResult<LazyFrame> {
     let options = EWMOptions {
         alpha: 2.0 / (span as f64 + 1.0),
         adjust: false,
@@ -105,15 +108,15 @@ fn with_low_pass(lf: LazyFrame, span: i64) -> LazyFrame {
         min_periods: 1,
         ignore_nulls: true,
     };
-    lf.with_column(
+    Ok(lf.with_column(
         col("value")
             .ewm_mean(options)
             .reverse()
             .ewm_mean(options)
             .reverse()
-            .over([col("station")])
+            .over([col("station")])?
             .alias("lpf_value"),
-    )
+    ))
 }
 
 /// All distinct stations present in the data, with friendly names where known.
@@ -126,7 +129,8 @@ pub fn get_stations() -> PolarsResult<Vec<StationInfo>> {
 
     let station_col = df.column("station")?.str()?;
     let mut stations: Vec<StationInfo> = station_col
-        .into_no_null_iter()
+        .iter()
+        .flatten()
         .map(|id| StationInfo {
             id: id.to_string(),
             name: names.get(id).unwrap_or(&id).to_string(),
@@ -145,7 +149,7 @@ pub fn get_datatypes() -> PolarsResult<Vec<String>> {
         .collect()?;
 
     let dt_col = df.column("datatype")?.str()?;
-    let mut types: Vec<String> = dt_col.into_no_null_iter().map(String::from).collect();
+    let mut types: Vec<String> = dt_col.iter().flatten().map(String::from).collect();
     types.sort();
     Ok(types)
 }
@@ -169,12 +173,12 @@ pub fn get_series(
         .sort(["station", "date"], SortMultipleOptions::default());
     if let Some(w) = window {
         if w > 1 {
-            lf = with_rolling_avg(lf, w);
+            lf = with_rolling_avg(lf, w)?;
         }
     }
     if let Some(s) = low_pass {
         if s > 1 {
-            lf = with_low_pass(lf, s);
+            lf = with_low_pass(lf, s)?;
         }
     }
 
@@ -233,12 +237,12 @@ pub fn get_mean_temp_trend(
         .sort(["station", "period"], SortMultipleOptions::default());
     if let Some(w) = window {
         if w > 1 {
-            lf = with_rolling_avg(lf, w);
+            lf = with_rolling_avg(lf, w)?;
         }
     }
     if let Some(s) = low_pass {
         if s > 1 {
-            lf = with_low_pass(lf, s);
+            lf = with_low_pass(lf, s)?;
         }
     }
 
@@ -635,29 +639,33 @@ mod tests {
 
     fn frame(stations: Vec<&str>, values: Vec<f64>) -> LazyFrame {
         let n = values.len();
-        DataFrame::new(vec![
-            Column::new("station".into(), stations),
-            Column::new(
-                "date".into(),
-                (0..n)
-                    .map(|i| format!("2000-01-{:02}", i + 1))
-                    .collect::<Vec<_>>(),
-            ),
-            Column::new("value".into(), values),
-        ])
+        DataFrame::new(
+            n,
+            vec![
+                Column::new("station".into(), stations),
+                Column::new(
+                    "date".into(),
+                    (0..n)
+                        .map(|i| format!("2000-01-{:02}", i + 1))
+                        .collect::<Vec<_>>(),
+                ),
+                Column::new("value".into(), values),
+            ],
+        )
         .unwrap()
         .lazy()
     }
 
     fn lpf_column(stations: Vec<&str>, values: Vec<f64>, span: i64) -> Vec<Option<f64>> {
         let df = with_low_pass(frame(stations, values), span)
+            .unwrap()
             .collect()
             .unwrap();
         df.column("lpf_value")
             .unwrap()
             .f64()
             .unwrap()
-            .into_iter()
+            .iter()
             .collect()
     }
 

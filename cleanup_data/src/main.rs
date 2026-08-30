@@ -51,7 +51,7 @@ fn main() -> PolarsResult<()> {
     let lazy_frames: Vec<LazyFrame> = paths
         .iter()
         .map(|p| {
-            LazyCsvReader::new(p)
+            LazyCsvReader::new(PlRefPath::from(p.to_string_lossy().as_ref()))
                 .with_has_header(true)
                 .finish()
                 .unwrap_or_else(|e| panic!("failed to read {}: {e}", p.display()))

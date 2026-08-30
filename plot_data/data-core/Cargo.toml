@@ -6,5 +6,5 @@ description = "Query layer over the combined weather Parquet file, shared by the
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
-polars = { version = "0.44", features = ["lazy", "parquet", "strings", "rolling_window", "ewma"] }
+polars = { version = "0.55", features = ["lazy", "parquet", "strings", "rolling_window", "ewma"] }
 dirs = "5"

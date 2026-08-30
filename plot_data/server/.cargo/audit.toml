@@ -1,29 +1,18 @@
 # cargo-audit overrides.
 #
-# These advisories are all transitive through polars (fast-float, pyo3,
-# quick-xml), which pins those crates to versions cargo can't move past
-# without upgrading polars itself. No fixed version is reachable in the
-# current dependency tree, and none of them affect code paths this program
-# uses.
+# Only two advisories remain, and both are quick-xml, pulled in transitively
+# by polars and pinned below the fixed version (>=0.41.0) by polars' own
+# dependency requirement. Neither affects code paths this program uses.
+#   - RUSTSEC-2026-0194 (quick-xml): quadratic dup-attribute check
+#   - RUSTSEC-2026-0195 (quick-xml): unbounded namespace-declaration alloc
 #
-# Verified 2026-08-30 against current polars (locked at 0.44.2, pinning
-# pyo3 0.21.2 and quick-xml 0.36.2):
-#   - RUSTSEC-2025-0003 (fast-float): still no upstream fix at all.
-#   - RUSTSEC-2025-0020 (pyo3):            fixed in pyo3 0.24.1
-#   - RUSTSEC-2026-0177 (pyo3):            fixed in pyo3 0.29.0
-#   - RUSTSEC-2026-0194/0195 (quick-xml):  fixed in quick-xml 0.41.0
-#
-# polars' own pyo3-polars companion crate is now on pyo3 ^0.27, so a newer
-# polars release likely clears the pyo3 entries (quick-xml 0.41 needs
-# checking separately). Bumping polars 0.44 -> latest is a real upgrade
-# (likely breaking changes in the lazy-frame surface data-core uses) --
-# do it as its own task with a build+test pass, not a quick version bump.
+# Cleared by the polars 0.44 -> 0.55 upgrade and no longer suppressed here:
+# RUSTSEC-2025-0003 (fast-float, dropped from the tree), RUSTSEC-2025-0020 and
+# RUSTSEC-2026-0177 (pyo3, now 0.39). Re-check the quick-xml pair on the next
+# polars upgrade -- they may clear the same way once polars moves past 0.39.
 
 [advisories]
 ignore = [
-    "RUSTSEC-2025-0003", # fast-float: segfault, no fixed version (polars)
-    "RUSTSEC-2025-0020", # pyo3: PyString::from_object overflow (polars pins pyo3 ~0.21)
-    "RUSTSEC-2026-0177", # pyo3: missing Sync on closure (polars pins pyo3 ~0.21)
     "RUSTSEC-2026-0194", # quick-xml: quadratic dup-attribute check (polars)
     "RUSTSEC-2026-0195", # quick-xml: unbounded namespace allocation (polars)
 ]
