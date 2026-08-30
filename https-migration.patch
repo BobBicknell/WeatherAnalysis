@@ -1,0 +1,91 @@
+diff --git a/README.md b/README.md
+index f7d234c..3bc50e8 100644
+--- a/README.md
++++ b/README.md
+@@ -5,7 +5,7 @@ fetched from NOAA's Climate Data Online (CDO) API, combined into a single
+ Parquet file, and visualized as a Tauri desktop app **and** as a web app
+ served from this machine.
+ 
+-Public web app: `http://bicknellfamily.duckdns.org/CorvallisWeather/`
++Public web app: `https://bicknellfamily.duckdns.org/CorvallisWeather/`
+ 
+ ## Repository layout
+ 
+diff --git a/deploy/Caddyfile.weather-plot b/deploy/Caddyfile.weather-plot
+index 896b24d..6db185f 100644
+--- a/deploy/Caddyfile.weather-plot
++++ b/deploy/Caddyfile.weather-plot
+@@ -1,4 +1,4 @@
+-http://bicknellfamily.duckdns.org {
++bicknellfamily.duckdns.org {
+     @bare path_regexp ^/CorvallisWeather$
+     redir @bare /CorvallisWeather/ permanent
+     @sub path_regexp ^/CorvallisWeather/
+diff --git a/deploy/README.md b/deploy/README.md
+index 240a932..56ffb35 100644
+--- a/deploy/README.md
++++ b/deploy/README.md
+@@ -1,10 +1,12 @@
+ # Deployment
+ 
+ Serves the weather plots app at
+-`http://bicknellfamily.duckdns.org/CorvallisWeather/`, using a path prefix on
+-port 80 instead of a separate port. Caddy strips the
+-`/CorvallisWeather` prefix and proxies to the Rust server on
+-`127.0.0.1:9002`; paths outside it get a 404.
++`https://bicknellfamily.duckdns.org/CorvallisWeather/`, using a path prefix
++instead of a separate port. Caddy handles automatic HTTPS (Let's Encrypt via
++the DuckDNS domain, HTTP-01 challenge over port 80) and strips the
++`/CorvallisWeather` prefix before proxying to the Rust server on
++`127.0.0.1:9002`; paths outside it get a 404. Plain HTTP requests are
++redirected to HTTPS automatically.
+ 
+ ## Layout
+ 
+@@ -41,18 +43,15 @@ per request.)
+ 
+ ## Manual steps you still owe
+ 
+-- **Router**: forward TCP port **80** to this machine if it isn't already
+-  (the existing Mealie/8083 ports forward the *other* public ports).
++- **Router**: forward TCP ports **80** and **443** to this machine if they
++  aren't already (the existing Mealie/8083 ports forward the *other* public
++  ports). Port 80 is required even though the site serves HTTPS — Caddy uses
++  it for the Let's Encrypt HTTP-01 challenge and to redirect plain-HTTP
++  requests.
+ - **DNS**: `bicknellfamily.duckdns.org` already resolves to this box.
+ 
+ ## Uninstall
+ 
+ ```
+ sudo ./deploy/uninstall.sh
+-```
+-
+-## Future: HTTPS
+-
+-When you want TLS, change the site address from `http://…` to `https://…`
+-(or drop the scheme) and forward port 443; Caddy then issues a DuckDNS
+-Let's Encrypt cert automatically.
+\ No newline at end of file
++```
+\ No newline at end of file
+diff --git a/deploy/install.sh b/deploy/install.sh
+index 76d8360..954c92a 100755
+--- a/deploy/install.sh
++++ b/deploy/install.sh
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env bash
+-# Enable the weather plots web app at http://bicknellfamily.duckdns.org/CorvallisWeather/
++# Enable the weather plots web app at https://bicknellfamily.duckdns.org/CorvallisWeather/
+ # Requires the release build to exist first:
+ #   cd plot_data/server && cargo build --release
+ # Then run from the repo root with sudo:
+@@ -16,7 +16,7 @@ cp "$REPO/plot_data/server/target/release/weather-server" "$BIN"
+ echo ">> Installing systemd unit"
+ cp "$REPO/deploy/weather-plot.service" "$UNIT"
+ 
+-echo ">> Registering Caddy site http://bicknellfamily.duckdns.org/CorvallisWeather/"
++echo ">> Registering Caddy site https://bicknellfamily.duckdns.org/CorvallisWeather/"
+ if grep -q 'CorvallisWeather' /etc/caddy/Caddyfile; then
+     echo "   CorvallisWeather block already present; leaving Caddyfile untouched"
+ else
