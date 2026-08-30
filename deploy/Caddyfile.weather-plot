@@ -1,0 +1,12 @@
+http://bicknellfamily.duckdns.org {
+    @bare path_regexp ^/CorvallisWeather$
+    redir @bare /CorvallisWeather/ permanent
+    @sub path_regexp ^/CorvallisWeather/
+    handle @sub {
+        uri strip_prefix /CorvallisWeather
+        reverse_proxy localhost:9002
+    }
+    handle {
+        respond "Not found" 404
+    }
+}

@@ -40,10 +40,8 @@ const BASE_URL: &str = "https://www.ncei.noaa.gov/cdo-web/api/v2/data";
 // this station reports (TMAX/TMIN/PRCP plus whatever else is available:
 // SNOW, SNWD, TOBS, WT## weather-type flags, etc.)
 
-
 // Station's period of record starts 1893-01-01 (per NOAA CDO station detail
 // page). Update this if you switch stations.
-
 
 #[derive(Deserialize, Debug)]
 struct CdoResponse {

@@ -1,0 +1,42 @@
+#!/bin/sh
+# pre-push hook: run Rust checks across every crate and block the push if any
+# fail. Adapted from the RustyMealie repo's hook. There is no npm/TypeScript
+# frontend here (plain JS, no build step), so those checks don't apply.
+#
+# Enable with:  git config core.hooksPath hooks
+#
+# Checks, per crate (pull_data, cleanup_data, plot_data/data-core,
+# plot_data/server, plot_data/src-tauri):
+#   - cargo audit   (skipped if cargo-audit not installed)
+#   - cargo fmt --check
+#   - cargo clippy --all-targets -- -D warnings
+#   - cargo test
+
+set -e
+
+cd "$(dirname "$0")/.." || exit 1
+
+CRATES="pull_data cleanup_data plot_data/data-core plot_data/server plot_data/src-tauri"
+
+if command -v cargo-audit >/dev/null 2>&1; then
+    echo "Running cargo audit..."
+    for crate in $CRATES; do
+        echo "  [audit]  $crate"
+        (cd "$crate" && cargo audit) \
+            || { echo "cargo audit FAILED in $crate (fix or nullify the advisory) - push aborted." >&2; exit 1; }
+    done
+else
+    echo "cargo-audit not installed (cargo install cargo-audit); skipping audit" >&2
+fi
+
+for crate in $CRATES; do
+    echo "== $crate =="
+    (cd "$crate" && cargo fmt --check) \
+        || { echo "cargo fmt --check FAILED in $crate (run 'cargo fmt' there) - push aborted." >&2; exit 1; }
+    (cd "$crate" && cargo clippy --all-targets -- -D warnings) \
+        || { echo "cargo clippy FAILED in $crate - push aborted." >&2; exit 1; }
+    (cd "$crate" && cargo test) \
+        || { echo "cargo test FAILED in $crate - push aborted." >&2; exit 1; }
+done
+
+echo "All pre-push checks passed."

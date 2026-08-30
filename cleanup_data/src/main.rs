@@ -71,4 +71,3 @@ fn main() -> PolarsResult<()> {
     println!("Wrote {} rows to {}", df.height(), outfile.display());
     Ok(())
 }
-

@@ -1,0 +1,20 @@
+# systemd unit: weather plots web server (http://bicknellfamily.duckdns.org/CorvallisWeather/)
+# Installed by: sudo ./deploy/install.sh
+[Unit]
+Description=Weather plots web server for bicknellfamily.duckdns.org:9926
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bob
+ExecStart=/home/bob/.local/bin/weather-plot-server
+Restart=always
+RestartSec=3
+Environment=WEATHER_SERVER_PORT=9002
+Environment=WEATHER_STATIC_DIR=/home/bob/Documents/Development/Rust/WeatherAnalysis/plot_data/src
+# WEATHER_DATA_PATH unset on purpose: resolves to bob's
+# ~/.config/RobertBicknell/Weatheranalysis/weather_all.parquet
+
+[Install]
+WantedBy=multi-user.target

@@ -1,7 +1,8 @@
-//! Query layer over the combined weather Parquet file. Deliberately has no
-//! Tauri dependency -- these are plain functions returning serde-serializable
-//! structs, so the same code could back a REST endpoint (e.g. an Axum
-//! server) later without changes, just a different caller than main.rs.
+//! Shared query layer over the combined weather Parquet file. Has no Tauri
+//! dependency -- these are plain functions returning serde-serializable
+//! structs -- so the same code backs both the Tauri desktop app (via
+//! `#[tauri::command]` wrappers) and the Axum web server (via REST
+//! handlers).
 
 use polars::prelude::*;
 use serde::Serialize;
@@ -198,9 +199,11 @@ pub fn get_mean_temp_trend(
         .clone()
         .filter(col("datatype").eq(lit("TMAX")))
         .select([col("station"), col("date"), col("value").alias("tmax")]);
-    let mut tmin = base
-        .filter(col("datatype").eq(lit("TMIN")))
-        .select([col("station"), col("date"), col("value").alias("tmin")]);
+    let mut tmin = base.filter(col("datatype").eq(lit("TMIN"))).select([
+        col("station"),
+        col("date"),
+        col("value").alias("tmin"),
+    ]);
 
     if let Some(s) = station {
         tmax = tmax.filter(col("station").eq(lit(s)));
@@ -220,7 +223,10 @@ pub fn get_mean_temp_trend(
         )
         .with_columns([
             ((col("tmax") + col("tmin")) / lit(2.0)).alias("mean_temp"),
-            col("date").str().slice(lit(0), lit(period_len)).alias("period"),
+            col("date")
+                .str()
+                .slice(lit(0), lit(period_len))
+                .alias("period"),
         ])
         .group_by([col("station"), col("period")])
         .agg([col("mean_temp").mean().alias("value")])
@@ -246,10 +252,7 @@ pub fn get_mean_temp_trend(
 /// of that count over the modern record (>= 1980). Returns both sets as
 /// StationSeries: `days` covers the full record, `fit` one fitted curve per
 /// station whose x values are years and whose value is the fitted count.
-pub fn get_hot_days_per_year(
-    threshold: f64,
-    station: Option<&str>,
-) -> PolarsResult<HotDaysResult> {
+pub fn get_hot_days_per_year(threshold: f64, station: Option<&str>) -> PolarsResult<HotDaysResult> {
     let days = hot_day_counts(threshold, station)?;
 
     let fit = days
@@ -288,9 +291,11 @@ pub fn get_hot_days_per_year(
 }
 
 fn hot_day_counts(threshold: f64, station: Option<&str>) -> PolarsResult<Vec<StationSeries>> {
-    let mut lf = load_df()?
-        .filter(col("datatype").eq(lit("TMAX")))
-        .select([col("station"), col("date"), col("value")]);
+    let mut lf = load_df()?.filter(col("datatype").eq(lit("TMAX"))).select([
+        col("station"),
+        col("date"),
+        col("value"),
+    ]);
 
     if let Some(s) = station {
         lf = lf.filter(col("station").eq(lit(s)));
@@ -513,7 +518,9 @@ fn season_lengths(records: &[(String, String)]) -> HashMap<String, Vec<(u32, f64
     // station -> year -> (last spring frost doy, first fall frost doy)
     let mut by_year: SeasonAccumulator = HashMap::new();
     for (station, date) in records {
-        let Some((year, month, doy)) = day_of_year(date) else { continue };
+        let Some((year, month, doy)) = day_of_year(date) else {
+            continue;
+        };
         let in_spring = SPRING_WINDOW.contains(&month);
         let in_fall = FALL_WINDOW.contains(&month);
         if !in_spring && !in_fall {
@@ -569,7 +576,11 @@ fn day_of_year(date: &str) -> Option<(u32, u32, u32)> {
     }
     const CUMDAYS: [u32; 12] = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
     let leap = is_leap_year(year) && month > 2;
-    Some((year, month, CUMDAYS[(month - 1) as usize] + day + leap as u32))
+    Some((
+        year,
+        month,
+        CUMDAYS[(month - 1) as usize] + day + leap as u32,
+    ))
 }
 
 /// Gregorian leap-year rule.
@@ -595,7 +606,12 @@ fn group_into_series(df: &DataFrame, date_col_name: &str) -> PolarsResult<Vec<St
         let value = value_col.get(i).unwrap_or(f64::NAN);
         let avg = avg_col.and_then(|c| c.get(i));
         let lpf = lpf_col.and_then(|c| c.get(i));
-        grouped.entry(st).or_default().push(SeriesPoint { date, value, avg, lpf });
+        grouped.entry(st).or_default().push(SeriesPoint {
+            date,
+            value,
+            avg,
+            lpf,
+        });
     }
 
     let mut result: Vec<StationSeries> = grouped
@@ -623,7 +639,9 @@ mod tests {
             Column::new("station".into(), stations),
             Column::new(
                 "date".into(),
-                (0..n).map(|i| format!("2000-01-{:02}", i + 1)).collect::<Vec<_>>(),
+                (0..n)
+                    .map(|i| format!("2000-01-{:02}", i + 1))
+                    .collect::<Vec<_>>(),
             ),
             Column::new("value".into(), values),
         ])
@@ -632,7 +650,9 @@ mod tests {
     }
 
     fn lpf_column(stations: Vec<&str>, values: Vec<f64>, span: i64) -> Vec<Option<f64>> {
-        let df = with_low_pass(frame(stations, values), span).collect().unwrap();
+        let df = with_low_pass(frame(stations, values), span)
+            .collect()
+            .unwrap();
         df.column("lpf_value")
             .unwrap()
             .f64()
@@ -643,8 +663,11 @@ mod tests {
 
     #[test]
     fn constant_series_pass_through_unchanged_per_station() {
-        let got = lpf_column(vec!["a", "a", "a", "b", "b", "b"],
-                             vec![10.0, 10.0, 10.0, 20.0, 20.0, 20.0], 3);
+        let got = lpf_column(
+            vec!["a", "a", "a", "b", "b", "b"],
+            vec![10.0, 10.0, 10.0, 20.0, 20.0, 20.0],
+            3,
+        );
         assert_eq!(got[..3], vec![Some(10.0); 3][..]);
         assert_eq!(got[3..], vec![Some(20.0); 3]);
     }
@@ -653,14 +676,20 @@ mod tests {
     fn forward_backward_pass_is_zero_phase() {
         // An impulse must remain at its original index -- proof the backward
         // pass cancels the EMA's phase lag.
-        let got = lpf_column(vec!["a"; 21],
-                             vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                                  1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                                  0.0, 0.0], 3);
-        let peak = got.iter()
+        let got = lpf_column(
+            vec!["a"; 21],
+            vec![
+                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0, 0.0,
+            ],
+            3,
+        );
+        let peak = got
+            .iter()
             .enumerate()
             .max_by(|a, b| a.1.unwrap().total_cmp(&b.1.unwrap()))
-            .unwrap().0;
+            .unwrap()
+            .0;
         assert_eq!(peak, 10);
         // Response decays symmetrically around the peak -- adjust:false makes
         // both passes identical recursions, so any residual is the EWM
@@ -695,9 +724,13 @@ mod tests {
             assert!(s.points.iter().all(|p| p.lpf.is_some()));
             // Filtered series must never exceed the record max by much or
             // dip below the record min: sanity on scale.
-            let (min, max) = s.points.iter()
+            let (min, max) = s
+                .points
+                .iter()
                 .map(|p| p.value)
-                .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| (a.min(v), b.max(v)));
+                .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| {
+                    (a.min(v), b.max(v))
+                });
             for p in &s.points {
                 let l = p.lpf.unwrap();
                 assert!(l >= min - 25.0 && l <= max + 25.0, "lpf out of range: {l}");
@@ -716,11 +749,19 @@ mod tests {
         assert!(!res.days.is_empty());
         for s in &res.days {
             for p in &s.points {
-                assert!(p.value >= 0.0 && p.value <= 366.0, "implausible count: {}", p.value);
+                assert!(
+                    p.value >= 0.0 && p.value <= 366.0,
+                    "implausible count: {}",
+                    p.value
+                );
                 assert!(p.date.len() == 4, "expected year, got {}", p.date);
             }
         }
-        let total: f64 = res.days.iter().flat_map(|s| s.points.iter().map(|p| p.value)).sum();
+        let total: f64 = res
+            .days
+            .iter()
+            .flat_map(|s| s.points.iter().map(|p| p.value))
+            .sum();
         assert!(total > 0.0, "no days above 90°F found in the whole record");
 
         // Every station with data must get a fit over the modern record --
@@ -845,7 +886,9 @@ mod tests {
                 // A plausible Pacific-Northwest growing season is ~100-260 days.
                 assert!(
                     p.value >= 60.0 && p.value <= 300.0,
-                    "implausible season length {} for {}", p.value, s.station_name
+                    "implausible season length {} for {}",
+                    p.value,
+                    s.station_name
                 );
             }
         }
@@ -856,7 +899,8 @@ mod tests {
             assert_eq!(d.station_name, f.station_name);
             assert!(
                 f.points.len() >= 4,
-                "cubic fit too short for {}", f.station_name
+                "cubic fit too short for {}",
+                f.station_name
             );
             assert_eq!(
                 f.points.len(),
