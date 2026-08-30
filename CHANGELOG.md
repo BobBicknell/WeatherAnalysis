@@ -6,6 +6,27 @@ commit date; `Unreleased` covers work in the working tree not yet committed.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-30
+
+### Added
+- **`pull_data` test coverage**: pagination/retry internals factored into a
+  `PullConfig` (base URL + sleep timing) so tests can drive `fetch_year`
+  against a mock server; `mockito`-based suites covering page-boundary
+  offsets, retry-on-rate-limit, error propagation, and empty results.
+- **CI backstop** (`.github/workflows/ci.yml`): GitHub Actions mirror of the
+  pre-push hook — `cargo fmt --check`, `cargo clippy --all-targets -- -D
+  warnings`, `cargo test`, and `cargo audit` for every crate on push to `main`
+  and PRs (a safety net for pushes made without the local hook).
+- **`LICENSE`** (MIT).
+
+### Changed
+- **Public deploy**: automatic HTTPS via Caddy — the site block switched from
+  plain `http://` to a DuckDNS-certified HTTPS site; `deploy/README.md` and
+  `install.sh` updated accordingly.
+- **Audit suppressions**: the nullified polars transitive advisories in each
+  crate's `.cargo/audit.toml` annotated with the dependency-fix version each
+  can be cleared at on the next upgrade.
+
 ## [0.2.0] - 2026-08-30
 
 ### Added
@@ -78,5 +99,6 @@ Initial release.
 - Vendored Plotly.js so the app needs no internet at runtime.
 - READMEs for the pipeline and the viewer.
 
-[Unreleased]: https://github.com/BobBicknell/WeatherAnalysis/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/BobBicknell/WeatherAnalysis/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/BobBicknell/WeatherAnalysis/releases/tag/v0.2.1
 [0.2.0]: https://github.com/BobBicknell/WeatherAnalysis/releases/tag/v0.2.0
