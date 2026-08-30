@@ -6,6 +6,21 @@ commit date; `Unreleased` covers work in the working tree not yet committed.
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-08-30
+
+### Changed
+- **Polars 0.44 -> 0.55** in `cleanup_data` and `plot_data/data-core` (the
+  desktop app and web server pick it up transitively through `data-core`).
+  Fixes driven by the new API: `PlRefPath` for `scan_parquet`/`LazyCsvReader`,
+  `Expr::over` now returning `PolarsResult` (propagated through the
+  rolling-mean / low-pass helpers), numeric-only `into_no_null_iter`, and
+  `DataFrame::new(height, columns)`. This clears the earlier TODO to revisit
+  on the next polars upgrade.
+- **Audit suppressions trimmed**: the polars bump drops fast-float from the
+  tree and moves pyo3 0.21 -> 0.39, clearing RUSTSEC-2025-0003, 2025-0020 and
+  2026-0177. The two quick-xml entries (RUSTSEC-2026-0194/0195) remain:
+  polars still pins quick-xml 0.39 (< the 0.41 fix).
+
 ## [0.2.1] - 2026-08-30
 
 ### Added
@@ -99,6 +114,7 @@ Initial release.
 - Vendored Plotly.js so the app needs no internet at runtime.
 - READMEs for the pipeline and the viewer.
 
-[Unreleased]: https://github.com/BobBicknell/WeatherAnalysis/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/BobBicknell/WeatherAnalysis/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/BobBicknell/WeatherAnalysis/releases/tag/v0.2.2
 [0.2.1]: https://github.com/BobBicknell/WeatherAnalysis/releases/tag/v0.2.1
 [0.2.0]: https://github.com/BobBicknell/WeatherAnalysis/releases/tag/v0.2.0
