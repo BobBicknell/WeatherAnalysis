@@ -83,8 +83,17 @@ jobs:
           - plot_data/src-tauri
     steps:
       - uses: actions/checkout@v4
-      - name: cargo audit
-        uses: rustsec/audit-check@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          working-directory: ${{ matrix.crate }}
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      # Mirrors hooks/pre-push exactly. Running inside the crate directory is
+      # important: it's where {crate}/.cargo/audit.toml (the ignore list) is
+      # read from. The former rustsec/audit-check@v2 action instead ran
+      # `cargo audit --json --file <crate>/Cargo.lock` from the repo root, so
+      # it never saw the per-crate config and failed on warnings.
+      - name: cargo audit --deny warnings
+        working-directory: ${{ matrix.crate }}
+        run: cargo audit --deny warnings
