@@ -6,6 +6,15 @@ commit date; `Unreleased` covers work in the working tree not yet committed.
 
 ## [Unreleased]
 
+### Fixed
+- **CI audit jobs failing on warnings**: `rustsec/audit-check@v2` runs
+  `cargo audit --deny warnings`, which force-enables informational
+  advisories — the v0.2.1 audit jobs were red on exactly this. Each crate's
+  `.cargo/audit.toml` now ignores the informational advisories it truly
+  can't upgrade past (bincode, the Tauri GTK/glib/unic stack in `src-tauri`)
+  by ID, disables the ID-less `chacha20` (yanked, via `rand`) check, and the
+  pre-push hook now mirrors CI by running `--deny warnings` too.
+
 ## [0.2.2] - 2026-08-30
 
 ### Changed

@@ -7,7 +7,7 @@
 #
 # Checks, per crate (pull_data, cleanup_data, plot_data/data-core,
 # plot_data/server, plot_data/src-tauri):
-#   - cargo audit   (skipped if cargo-audit not installed)
+#   - cargo audit --deny warnings   (skipped if cargo-audit not installed)
 #   - cargo fmt --check
 #   - cargo clippy --all-targets -- -D warnings
 #   - cargo test
@@ -22,7 +22,7 @@ if command -v cargo-audit >/dev/null 2>&1; then
     echo "Running cargo audit..."
     for crate in $CRATES; do
         echo "  [audit]  $crate"
-        (cd "$crate" && cargo audit) \
+        (cd "$crate" && cargo audit --deny warnings) \
             || { echo "cargo audit FAILED in $crate (fix or nullify the advisory) - push aborted." >&2; exit 1; }
     done
 else

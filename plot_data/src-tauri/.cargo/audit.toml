@@ -1,18 +1,48 @@
 # cargo-audit overrides.
 #
-# Only two advisories remain, and both are quick-xml, pulled in transitively
-# by polars and pinned below the fixed version (>=0.41.0) by polars' own
-# dependency requirement. Neither affects code paths this program uses.
-#   - RUSTSEC-2026-0194 (quick-xml): quadratic dup-attribute check
-#   - RUSTSEC-2026-0195 (quick-xml): unbounded namespace-declaration alloc
+# Every entry below is informational (unmaintained / unsound) or a
+# vulnerability, reached only transitively through either the Tauri v2
+# Linux desktop stack (gtk/gdk/atk/glib/unic/proc-macro-error via gtk-rs)
+# or polars (quick-xml, bincode, chacha20). None affects code paths this
+# program uses, and all are pinned below the fixed version / have no
+# upstream successor, so they clear only when an upstream bumps.
 #
-# Cleared by the polars 0.44 -> 0.55 upgrade and no longer suppressed here:
-# RUSTSEC-2025-0003 (fast-float, dropped from the tree), RUSTSEC-2025-0020 and
-# RUSTSEC-2026-0177 (pyo3, now 0.39). Re-check the quick-xml pair on the next
-# polars upgrade -- they may clear the same way once polars moves past 0.39.
+#   - quick-xml RUSTSEC-2026-0194/0195 (fixed in >=0.41.0, polars pins 0.39)
+#   - chacha20 0.10.1 (yanked, via rand) -- no advisory ID, so the [yanked]
+#     toggle is the only supported suppression
+#
+# CI's audit-check@v2 runs `cargo audit --deny warnings` (the local pre-push
+# hook does the same), and that flag force-enables informational warnings;
+# ignoring them by ID is the only compliant suppression.
+#
+# GTK/glib/unic desktop-stack advisories (pinned by tauri v2 / gtk-rs):
+#   atk/sys, gdk/sys, gdkx11/sys, gdkwayland-sys, gtk/sys, gtk3-macros,
+#   glib, proc-macro-error, unic-char-*, unic-common, unic-ucd-*.
+# Re-check on the next tauri / polars upgrade.
 
 [advisories]
 ignore = [
+    "RUSTSEC-2024-0411", # gdkwayland-sys: unmaintained (tauri/gtk)
+    "RUSTSEC-2024-0412", # gdk: unmaintained (tauri/gtk)
+    "RUSTSEC-2024-0413", # atk: unmaintained (tauri/gtk)
+    "RUSTSEC-2024-0414", # gdkx11-sys: unmaintained (tauri/gtk)
+    "RUSTSEC-2024-0415", # gtk: unmaintained (tauri/gtk)
+    "RUSTSEC-2024-0416", # atk-sys: unmaintained (tauri/gtk)
+    "RUSTSEC-2024-0417", # gdkx11: unmaintained (tauri/gtk)
+    "RUSTSEC-2024-0418", # gdk-sys: unmaintained (tauri/gtk)
+    "RUSTSEC-2024-0419", # gtk3-macros: unmaintained (tauri/gtk)
+    "RUSTSEC-2024-0420", # gtk-sys: unmaintained (tauri/gtk)
+    "RUSTSEC-2024-0370", # proc-macro-error: unmaintained (transitive)
+    "RUSTSEC-2024-0429", # glib: unsound (tauri/gtk, fix needs gtk-rs bump)
+    "RUSTSEC-2025-0075", # unic-char-range: unmaintained (unicode-ident)
+    "RUSTSEC-2025-0080", # unic-common: unmaintained (unicode-ident)
+    "RUSTSEC-2025-0081", # unic-char-property: unmaintained (unicode-ident)
+    "RUSTSEC-2025-0098", # unic-ucd-version: unmaintained (unicode-ident)
+    "RUSTSEC-2025-0100", # unic-ucd-ident: unmaintained (unicode-ident)
+    "RUSTSEC-2025-0141", # bincode: unmaintained, pinned by polars-utils
     "RUSTSEC-2026-0194", # quick-xml: quadratic dup-attribute check (polars)
     "RUSTSEC-2026-0195", # quick-xml: unbounded namespace allocation (polars)
 ]
+
+[yanked]
+enabled = false # chacha20 0.10.1: yanked, pinned by rand (transitive)
