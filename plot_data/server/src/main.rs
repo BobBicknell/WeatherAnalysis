@@ -12,7 +12,7 @@ use axum::http::StatusCode;
 use axum::response::Json;
 use axum::routing::get;
 use axum::Router;
-use plot_data_core::{GrowingSeasonResult, HotDaysResult, StationInfo, StationSeries};
+use plot_data_core::{StationInfo, StationSeries};
 use serde::Deserialize;
 use std::env;
 use std::path::PathBuf;
@@ -72,6 +72,19 @@ async fn get_series(Query(p): Query<Params>) -> Result<Json<Vec<StationSeries>>,
     ))
 }
 
+async fn get_daily_anomaly(Query(p): Query<Params>) -> Result<Json<Vec<StationSeries>>, ApiError> {
+    let datatype = p
+        .datatype
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| bad_request("missing datatype parameter"))?;
+    Ok(Json(
+        blocking(move || {
+            plot_data_core::get_daily_anomaly(&datatype, p.station.as_deref(), p.window, p.low_pass)
+        })
+        .await?,
+    ))
+}
+
 async fn get_mean_temp_trend(
     Query(p): Query<Params>,
 ) -> Result<Json<Vec<StationSeries>>, ApiError> {
@@ -87,7 +100,9 @@ async fn get_mean_temp_trend(
     ))
 }
 
-async fn get_hot_days_per_year(Query(p): Query<Params>) -> Result<Json<HotDaysResult>, ApiError> {
+async fn get_hot_days_per_year(
+    Query(p): Query<Params>,
+) -> Result<Json<Vec<StationSeries>>, ApiError> {
     let threshold = p
         .threshold
         .ok_or_else(|| bad_request("missing threshold parameter"))?;
@@ -97,9 +112,7 @@ async fn get_hot_days_per_year(Query(p): Query<Params>) -> Result<Json<HotDaysRe
     ))
 }
 
-async fn get_growing_season(
-    Query(p): Query<Params>,
-) -> Result<Json<GrowingSeasonResult>, ApiError> {
+async fn get_growing_season(Query(p): Query<Params>) -> Result<Json<Vec<StationSeries>>, ApiError> {
     Ok(Json(
         blocking(move || plot_data_core::get_growing_season(p.station.as_deref())).await?,
     ))
@@ -134,6 +147,7 @@ async fn main() {
         .route("/api/stations", get(get_stations))
         .route("/api/datatypes", get(get_datatypes))
         .route("/api/series", get(get_series))
+        .route("/api/daily-anomaly", get(get_daily_anomaly))
         .route("/api/mean-temp-trend", get(get_mean_temp_trend))
         .route("/api/hot-days", get(get_hot_days_per_year))
         .route("/api/growing-season", get(get_growing_season))

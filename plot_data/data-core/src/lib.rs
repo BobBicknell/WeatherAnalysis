@@ -187,6 +187,56 @@ pub fn get_series(
     group_into_series(&df, "date")
 }
 
+/// Anomaly series: `value` minus the calendar-day climatology. For each
+/// station and calendar day (MM-DD), the "normal" is the mean of `value`
+/// over every year that station has data for that day; the plotted value is
+/// `value - normal`. Same parameters and behavior as `get_series` (station
+/// filter, then optional moving-average/low-pass applied to the anomaly).
+pub fn get_daily_anomaly(
+    datatype: &str,
+    station: Option<&str>,
+    window: Option<i64>,
+    low_pass: Option<i64>,
+) -> PolarsResult<Vec<StationSeries>> {
+    let mut lf = load_df()?.filter(col("datatype").eq(lit(datatype)));
+    if let Some(s) = station {
+        lf = lf.filter(col("station").eq(lit(s)));
+    }
+    let mut lf = subtract_calendar_day_normal(
+        lf.select([col("station"), col("date"), col("value")]),
+        "date",
+    )?;
+    if let Some(w) = window {
+        if w > 1 {
+            lf = with_rolling_avg(lf, w)?;
+        }
+    }
+    if let Some(s) = low_pass {
+        if s > 1 {
+            lf = with_low_pass(lf, s)?;
+        }
+    }
+    let df = lf.collect()?;
+    group_into_series(&df, "date")
+}
+
+/// Replaces `value` with `value - normal`, where `normal` is the mean of
+/// `value` over every year that each station has data for that calendar day
+/// (MM-DD, derived from the string `date_col`). Returns the frame sorted by
+/// (station, date). Extracted from `get_daily_anomaly` so the subtraction is
+/// directly unit-testable with synthetic frames.
+fn subtract_calendar_day_normal(lf: LazyFrame, date_col: &str) -> PolarsResult<LazyFrame> {
+    Ok(lf
+        .with_column(
+            (col("value")
+                - col("value")
+                    .mean()
+                    .over([col("station"), col(date_col).str().slice(lit(5), lit(5))])?)
+            .alias("value"),
+        )
+        .sort(["station", date_col], SortMultipleOptions::default()))
+}
+
 /// Monthly or yearly average of (TMAX + TMIN) / 2 -- a much smoother trend
 /// line than plotting daily TMAX/TMIN directly, which is dominated by
 /// day-to-day noise. `period` is "monthly" or "yearly"; anything else
@@ -252,46 +302,13 @@ pub fn get_mean_temp_trend(
 }
 
 /// Number of days per year where TMAX exceeds `threshold` (in the same units
-/// as the data: degrees Fahrenheit here), plus a least-squares quadratic fit
-/// of that count over the modern record (>= 1980). Returns both sets as
-/// StationSeries: `days` covers the full record, `fit` one fitted curve per
-/// station whose x values are years and whose value is the fitted count.
-pub fn get_hot_days_per_year(threshold: f64, station: Option<&str>) -> PolarsResult<HotDaysResult> {
-    let days = hot_day_counts(threshold, station)?;
-
-    let fit = days
-        .iter()
-        .map(|s| {
-            let mut pts: Vec<(f64, f64)> = s
-                .points
-                .iter()
-                .filter_map(|p| {
-                    let year: f64 = p.date.parse().ok()?;
-                    (year >= FIT_START_YEAR).then_some((year, p.value))
-                })
-                .collect();
-            pts.sort_by(|a, b| a.0.total_cmp(&b.0));
-
-            let mut points = Vec::new();
-            if let Some((center, coeffs)) = poly_fit(&pts, 2) {
-                for (year, _) in &pts {
-                    points.push(SeriesPoint {
-                        date: year.to_string(),
-                        value: poly_value(&coeffs, center, *year),
-                        avg: None,
-                        lpf: None,
-                    });
-                }
-            }
-            StationSeries {
-                station_id: s.station_id.clone(),
-                station_name: s.station_name.clone(),
-                points,
-            }
-        })
-        .collect();
-
-    Ok(HotDaysResult { days, fit })
+/// as the data: degrees Fahrenheit here), as one `StationSeries` per station
+/// whose x values are years and whose value is the per-year count.
+pub fn get_hot_days_per_year(
+    threshold: f64,
+    station: Option<&str>,
+) -> PolarsResult<Vec<StationSeries>> {
+    hot_day_counts(threshold, station)
 }
 
 fn hot_day_counts(threshold: f64, station: Option<&str>) -> PolarsResult<Vec<StationSeries>> {
@@ -317,99 +334,6 @@ fn hot_day_counts(threshold: f64, station: Option<&str>) -> PolarsResult<Vec<Sta
     group_into_series(&df, "year")
 }
 
-/// Year threshold for the hot-days quadratic fit ("modern" record).
-const FIT_START_YEAR: f64 = 1980.0;
-
-/// Least-squares polynomial fit of `degree` (1 = line, 2 = quadratic,
-/// 3 = cubic, ...) to the given (x, y) points, where x is a year. Returns
-/// the coefficients of y = c[0] + c[1]*t + c[2]*t^2 + ... with t = x - center
-/// and center the mean x, plus the center itself. Years are centered at
-/// their mean before solving the normal equations to keep the system
-/// well-conditioned (raw years ~2000 give x^4 ~ 1.6e13). Returns None when
-/// degenerate: fewer than degree+1 distinct points, or a (numerically)
-/// singular normal matrix -- e.g. all x identical.
-fn poly_fit(points: &[(f64, f64)], degree: usize) -> Option<(f64, Vec<f64>)> {
-    let order = degree + 1;
-    if points.len() < order {
-        return None;
-    }
-    let center = points.iter().map(|(x, _)| x).sum::<f64>() / points.len() as f64;
-
-    // Normal equations: M c = rhs with M[i][j] = sum of t^(i+j) and
-    // rhs[i] = sum of y * t^i over the centered samples.
-    let mut m = vec![vec![0.0; order]; order];
-    let mut rhs = vec![0.0; order];
-    let mut powers = vec![1.0; 2 * order];
-    for (x, y) in points {
-        let t = x - center;
-        for i in 1..powers.len() {
-            powers[i] = powers[i - 1] * t;
-        }
-        for i in 0..order {
-            rhs[i] += y * powers[i];
-            for (j, row) in m.iter_mut().enumerate() {
-                row[i] += powers[i + j];
-            }
-        }
-    }
-
-    // Solve by Gauss-Jordan elimination with partial pivoting.
-    for col in 0..order {
-        let mut piv = col;
-        for row in col + 1..order {
-            if m[row][col].abs() > m[piv][col].abs() {
-                piv = row;
-            }
-        }
-        if m[piv][col].abs() < 1e-12 {
-            return None;
-        }
-        m.swap(col, piv);
-        rhs.swap(col, piv);
-        let inv = 1.0 / m[col][col];
-        for entry in m[col][col..order].iter_mut() {
-            *entry *= inv;
-        }
-        rhs[col] *= inv;
-        for row in 0..order {
-            if row != col {
-                let factor = m[row][col];
-                if factor != 0.0 {
-                    let normalized = m[col][col..order].to_vec();
-                    for (target, n) in m[row][col..order].iter_mut().zip(normalized.iter()) {
-                        *target -= factor * n;
-                    }
-                    rhs[row] -= factor * rhs[col];
-                }
-            }
-        }
-    }
-
-    Some((center, rhs))
-}
-
-/// Evaluate a centered polynomial (from [`poly_fit`]) at `x` by Horner's rule.
-fn poly_value(coeffs: &[f64], center: f64, x: f64) -> f64 {
-    let t = x - center;
-    coeffs.iter().rev().fold(0.0, |acc, c| acc * t + c)
-}
-
-/// Outcome of [`get_hot_days_per_year`]: the per-year counts plus the
-/// quadratic fit over the modern record, one series per station each.
-#[derive(Serialize)]
-pub struct HotDaysResult {
-    pub days: Vec<StationSeries>,
-    pub fit: Vec<StationSeries>,
-}
-
-/// Outcome of [`get_growing_season`]: the per-year season lengths plus the
-/// cubic fit over the full record, one series per station each.
-#[derive(Serialize)]
-pub struct GrowingSeasonResult {
-    pub days: Vec<StationSeries>,
-    pub fit: Vec<StationSeries>,
-}
-
 /// Temperature (°F) at or below which a day counts as a frost day (TMIN).
 const FREEZE_TEMP: f64 = 32.0;
 
@@ -426,15 +350,13 @@ const FALL_WINDOW: std::ops::RangeInclusive<u32> = 7..=11;
 /// day-of-year, first fall frost day-of-year).
 type SeasonAccumulator = HashMap<String, HashMap<u32, (Option<f64>, Option<f64>)>>;
 
-/// Growing-season length per station plus a cubic least-squares fit of it
-/// over the full record: the number of days between the last spring frost and
-/// the first fall frost of each year, where a frost day is one whose low
-/// (TMIN) fell to 32 °F or below. Frosts are dated by month: spring frosts
-/// fall in March-June, fall frosts in July-November. `days` holds one
-/// StationSeries per station whose x values are years and whose value is the
-/// season length in days (years lacking a frost in either window are
-/// omitted); `fit` holds the corresponding cubic trend line.
-pub fn get_growing_season(station: Option<&str>) -> PolarsResult<GrowingSeasonResult> {
+/// Growing-season length per station: the number of days between the last
+/// spring frost and the first fall frost of each year, where a frost day is
+/// one whose low (TMIN) fell to 32 °F or below. Frosts are dated by month:
+/// spring frosts fall in March-June, fall frosts in July-November. Returns one
+/// `StationSeries` per station whose x values are years and whose value is the
+/// season length in days (years lacking a frost in either window are omitted).
+pub fn get_growing_season(station: Option<&str>) -> PolarsResult<Vec<StationSeries>> {
     let mut lf = load_df()?
         .filter(col("datatype").eq(lit("TMIN")))
         .filter(col("value").lt_eq(lit(FREEZE_TEMP)))
@@ -479,38 +401,7 @@ pub fn get_growing_season(station: Option<&str>) -> PolarsResult<GrowingSeasonRe
     result.retain(|s| !s.points.is_empty());
     result.sort_by(|a, b| a.station_name.cmp(&b.station_name));
 
-    // Cubic least-squares fit of the season length over the full record,
-    // one fitted curve per station (mirrors the hot-days quadratic fit).
-    let fit = result
-        .iter()
-        .map(|s| {
-            let mut pts: Vec<(f64, f64)> = s
-                .points
-                .iter()
-                .filter_map(|p| p.date.parse::<f64>().ok().map(|y| (y, p.value)))
-                .collect();
-            pts.sort_by(|a, b| a.0.total_cmp(&b.0));
-
-            let mut points = Vec::new();
-            if let Some((center, coeffs)) = poly_fit(&pts, 3) {
-                for (year, _) in &pts {
-                    points.push(SeriesPoint {
-                        date: year.to_string(),
-                        value: poly_value(&coeffs, center, *year),
-                        avg: None,
-                        lpf: None,
-                    });
-                }
-            }
-            StationSeries {
-                station_id: s.station_id.clone(),
-                station_name: s.station_name.clone(),
-                points,
-            }
-        })
-        .collect();
-
-    Ok(GrowingSeasonResult { days: result, fit })
+    Ok(result)
 }
 
 /// Pure helper: given (station, date) rows for freezing days, compute each
@@ -754,8 +645,8 @@ mod tests {
         // 90°F is a typical heat-wave threshold; counts must be non-zero for
         // at least one summer-leaning year somewhere, and bounded by 366.
         let res = get_hot_days_per_year(90.0, None).unwrap();
-        assert!(!res.days.is_empty());
-        for s in &res.days {
+        assert!(!res.is_empty());
+        for s in &res {
             for p in &s.points {
                 assert!(
                     p.value >= 0.0 && p.value <= 366.0,
@@ -766,60 +657,10 @@ mod tests {
             }
         }
         let total: f64 = res
-            .days
             .iter()
             .flat_map(|s| s.points.iter().map(|p| p.value))
             .sum();
         assert!(total > 0.0, "no days above 90°F found in the whole record");
-
-        // Every station with data must get a fit over the modern record --
-        // all three stations predate 1980, so each should have >= 3 points.
-        assert_eq!(res.fit.len(), res.days.len());
-        for f in &res.fit {
-            assert!(f.points.len() >= 3, "fit too short for {}", f.station_name);
-            for p in &f.points {
-                assert!(p.date.parse::<f64>().unwrap() >= FIT_START_YEAR);
-            }
-        }
-    }
-
-    #[test]
-    fn poly_fit_reproduces_parabola() {
-        // y = 5 - 2x + 0.5x^2 sampled over x in 1..=10 must come back out.
-        let pts: Vec<(f64, f64)> = (1..=10)
-            .map(|x| {
-                let x = x as f64;
-                (x, 5.0 - 2.0 * x + 0.5 * x * x)
-            })
-            .collect();
-        let (center, c) = poly_fit(&pts, 2).unwrap();
-        for (x, y) in &pts {
-            let got = poly_value(&c, center, *x);
-            assert!((got - y).abs() < 1e-9, "fit at x={x}: {got} vs {y}");
-        }
-    }
-
-    #[test]
-    fn poly_fit_reproduces_cubic() {
-        // y = x^3 - 2x^2 + 0.5x + 3 sampled over x in 1..=20 must come back
-        // out (degree-3 fit, the growing-season default).
-        let pts: Vec<(f64, f64)> = (1..=20)
-            .map(|x| {
-                let x = x as f64;
-                (x, x * x * x - 2.0 * x * x + 0.5 * x + 3.0)
-            })
-            .collect();
-        let (center, c) = poly_fit(&pts, 3).unwrap();
-        for (x, y) in &pts {
-            let got = poly_value(&c, center, *x);
-            assert!((got - y).abs() < 1e-8, "cubic fit at x={x}: {got} vs {y}");
-        }
-    }
-
-    #[test]
-    fn poly_fit_needs_enough_points() {
-        assert!(poly_fit(&[(2000.0, 5.0), (2001.0, 6.0)], 2).is_none());
-        assert!(poly_fit(&[], 0).is_none());
     }
 
     #[test]
@@ -886,8 +727,8 @@ mod tests {
             return;
         }
         let res = get_growing_season(None).unwrap();
-        assert!(!res.days.is_empty());
-        for s in &res.days {
+        assert!(!res.is_empty());
+        for s in &res {
             assert!(!s.points.is_empty(), "no seasons for {}", s.station_name);
             for p in &s.points {
                 assert!(p.date.len() == 4, "expected year, got {}", p.date);
@@ -900,22 +741,90 @@ mod tests {
                 );
             }
         }
-        // Every station with enough years must get a full-record cubic fit
-        // spanning the same years as its raw data.
-        assert_eq!(res.fit.len(), res.days.len());
-        for (d, f) in res.days.iter().zip(&res.fit) {
-            assert_eq!(d.station_name, f.station_name);
+    }
+
+    /// Frame with explicit dates (unlike `frame`, which only produces January
+    /// 2000), for tests that need several years of the same calendar day.
+    fn dated_frame(stations: Vec<&str>, dates: Vec<&str>, values: Vec<f64>) -> LazyFrame {
+        let n = values.len();
+        DataFrame::new(
+            n,
+            vec![
+                Column::new("station".into(), stations),
+                Column::new("date".into(), dates),
+                Column::new("value".into(), values),
+            ],
+        )
+        .unwrap()
+        .lazy()
+    }
+
+    #[test]
+    fn daily_anomaly_subtracts_calendar_day_climatology() {
+        // Station "a": Jan 1 values of 10, 30 -> normal 20; Jan 2 values 2, 4
+        // -> normal 3. Anomaly = value - normal.
+        let lf = subtract_calendar_day_normal(
+            dated_frame(
+                vec!["a", "a", "a", "a"],
+                vec!["2000-01-01", "2001-01-01", "2000-01-02", "2001-01-02"],
+                vec![10.0, 30.0, 2.0, 4.0],
+            ),
+            "date",
+        )
+        .unwrap();
+        let res = group_into_series(&lf.collect().unwrap(), "date").unwrap();
+        let a = &res[0];
+        assert_eq!(a.station_name, "a");
+        let by_date: std::collections::HashMap<_, _> =
+            a.points.iter().map(|p| (p.date.clone(), p.value)).collect();
+        assert!((by_date["2000-01-01"] - (10.0 - 20.0)).abs() < 1e-9);
+        assert!((by_date["2001-01-01"] - (30.0 - 20.0)).abs() < 1e-9);
+        assert!((by_date["2000-01-02"] - (2.0 - 3.0)).abs() < 1e-9);
+        assert!((by_date["2001-01-02"] - (4.0 - 3.0)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn daily_anomaly_is_per_station() {
+        // Same calendar day, different means per station: "a" normal = 100,
+        // "b" normal = 10 for Jan 1.
+        let lf = subtract_calendar_day_normal(
+            dated_frame(
+                vec!["a", "a", "b", "b"],
+                vec!["2000-01-01", "2001-01-01", "2000-01-01", "2001-01-01"],
+                vec![90.0, 110.0, 8.0, 12.0],
+            ),
+            "date",
+        )
+        .unwrap();
+        let res = group_into_series(&lf.collect().unwrap(), "date").unwrap();
+        let by_name: std::collections::HashMap<_, _> = res
+            .iter()
+            .map(|s| (s.station_name.clone(), s.points[0].value))
+            .collect();
+        assert!((by_name["a"] - (90.0 - 100.0)).abs() < 1e-9);
+        assert!((by_name["b"] - (8.0 - 10.0)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn daily_anomaly_real_data() {
+        if !resolved_data_path().exists() {
+            return;
+        }
+        let res = get_daily_anomaly("TMAX", None, None, None).unwrap();
+        assert!(!res.is_empty());
+        for s in &res {
+            assert!(!s.points.is_empty());
+            // If the climatology were ignored (raw values), January would be
+            // consistently positive. Anomalies must straddle zero; requiring
+            // some negatives proves the subtraction actually happened.
             assert!(
-                f.points.len() >= 4,
-                "cubic fit too short for {}",
-                f.station_name
+                s.points.iter().any(|p| p.value < 0.0),
+                "no negative anomalies for {}",
+                s.station_name
             );
-            assert_eq!(
-                f.points.len(),
-                d.points.len(),
-                "fit must span the same years for {}",
-                f.station_name
-            );
+            // A daily anomaly vs. its own mean over all years should be
+            // roughly zero-centered: abs(max) and abs(min) comparable scale.
+            assert_eq!(s.points[0].date.len(), 10, "expected YYYY-MM-DD");
         }
     }
 }

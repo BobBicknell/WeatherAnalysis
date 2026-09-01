@@ -20,17 +20,28 @@ fn get_series(
 }
 
 #[tauri::command]
+fn get_daily_anomaly(
+    datatype: String,
+    station: Option<String>,
+    window: Option<i64>,
+    low_pass: Option<i64>,
+) -> Result<Vec<plot_data_core::StationSeries>, String> {
+    plot_data_core::get_daily_anomaly(&datatype, station.as_deref(), window, low_pass)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn get_hot_days_per_year(
     threshold: f64,
     station: Option<String>,
-) -> Result<plot_data_core::HotDaysResult, String> {
+) -> Result<Vec<plot_data_core::StationSeries>, String> {
     plot_data_core::get_hot_days_per_year(threshold, station.as_deref()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn get_growing_season(
     station: Option<String>,
-) -> Result<plot_data_core::GrowingSeasonResult, String> {
+) -> Result<Vec<plot_data_core::StationSeries>, String> {
     plot_data_core::get_growing_season(station.as_deref()).map_err(|e| e.to_string())
 }
 
@@ -65,6 +76,7 @@ fn main() {
             get_stations,
             get_datatypes,
             get_series,
+            get_daily_anomaly,
             get_hot_days_per_year,
             get_growing_season,
             get_mean_temp_trend

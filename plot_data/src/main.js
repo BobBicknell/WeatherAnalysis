@@ -1,4 +1,4 @@
-import { getStations, getDatatypes, getSeries, getMeanTempTrend, getHotDaysPerYear, getGrowingSeason } from "./api.js";
+import { getStations, getDatatypes, getSeries, getDailyAnomaly, getMeanTempTrend, getHotDaysPerYear, getGrowingSeason } from "./api.js";
 
 // Fixed categorical order (dataviz skill's validated palette) -- assigned
 // by station index, never cycled/reassigned, so a station keeps its color
@@ -83,6 +83,7 @@ const stationSelect = document.getElementById("station");
 const dailyWindowInput = document.getElementById("daily-window");
 const dailyLowPassInput = document.getElementById("daily-lowpass");
 const dailyShowRaw = document.getElementById("daily-show-raw");
+const dailyAnomaly = document.getElementById("daily-anomaly");
 
 async function initDaily(datatypes, stations) {
   datatypeSelect.innerHTML = datatypes.map((d) => `<option value="${d}">${d}</option>`).join("");
@@ -102,7 +103,10 @@ async function renderDaily() {
   const station = stationSelect.value; // "" means All
   const window = parseWindow(dailyWindowInput);
   const lowPass = parseWindow(dailyLowPassInput);
-  const series = await getSeries(datatype, station, window, lowPass);
+  const anomaly = dailyAnomaly.checked;
+  const series = anomaly
+      ? await getDailyAnomaly(datatype, station, window, lowPass)
+      : await getSeries(datatype, station, window, lowPass);
 
   const traces = seriesToTraces(
       series,
@@ -116,9 +120,9 @@ async function renderDaily() {
       "chart",
       traces,
       {
-        title: `${datatype} by station`,
+        title: anomaly ? `${datatype} - daily normal` : `${datatype} by station`,
         xaxis: { title: "Date" },
-        yaxis: { title: datatype },
+        yaxis: { title: anomaly ? `${datatype} anomaly` : datatype },
         margin: { t: 50 },
         autosize: true,
       },
@@ -131,6 +135,7 @@ stationSelect.addEventListener("change", renderDaily);
 dailyWindowInput.addEventListener("input", renderDaily);
 dailyLowPassInput.addEventListener("input", renderDaily);
 dailyShowRaw.addEventListener("change", renderDaily);
+dailyAnomaly.addEventListener("change", renderDaily);
 
 // ---- Trends view ----
 
@@ -204,24 +209,9 @@ async function renderHot() {
   const threshold = parseFloat(hotThresholdInput.value);
   const station = hotStationSelect.value; // "" means All
   if (!Number.isFinite(threshold)) return;
-  const { days, fit } = await getHotDaysPerYear(threshold, station);
+  const days = await getHotDaysPerYear(threshold, station);
 
   const traces = seriesToTraces(days, null, null, "lines+markers", true);
-  // Quadratic fit of the count over the modern record (>= 1980), dashed line
-  // in the same hue as its station's raw data.
-  fit.forEach((s, i) => {
-    const color = PALETTE[i % PALETTE.length];
-    if (s.points.length > 0) {
-      traces.push({
-        x: s.points.map((p) => p.date),
-        y: s.points.map((p) => p.value),
-        name: `${s.station_name} quadratic fit`,
-        mode: "lines",
-        type: "scatter",
-        line: { color, width: 3, dash: "dash" },
-      });
-    }
-  });
 
   Plotly.newPlot(
       "hot-chart",
@@ -256,24 +246,9 @@ async function initGrowing(stations) {
 
 async function renderGrowing() {
   const station = growingStationSelect.value; // "" means All
-  const { days, fit } = await getGrowingSeason(station);
+  const days = await getGrowingSeason(station);
 
   const traces = seriesToTraces(days, null, null, "lines+markers", true);
-  // Cubic fit of the season length over the full record, dashed line in the
-  // same hue as its station's raw data.
-  fit.forEach((s, i) => {
-    const color = PALETTE[i % PALETTE.length];
-    if (s.points.length > 0) {
-      traces.push({
-        x: s.points.map((p) => p.date),
-        y: s.points.map((p) => p.value),
-        name: `${s.station_name} cubic fit`,
-        mode: "lines",
-        type: "scatter",
-        line: { color, width: 3, dash: "dash" },
-      });
-    }
-  });
 
   Plotly.newPlot(
       "growing-chart",

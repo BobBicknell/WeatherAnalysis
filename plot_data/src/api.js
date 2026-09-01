@@ -48,6 +48,23 @@ export async function getSeries(datatype, station, window, lowPass) {
   });
 }
 
+export async function getDailyAnomaly(datatype, station, window, lowPass) {
+  if (tauriInvoke) {
+    return tauriInvoke("get_daily_anomaly", {
+      datatype,
+      station: station || null,
+      window: window || null,
+      lowPass: lowPass || null,
+    });
+  }
+  return webJson("daily-anomaly", {
+    datatype,
+    station: station || null,
+    window: window || null,
+    low_pass: lowPass || null,
+  });
+}
+
 export async function getMeanTempTrend(period, station, window, lowPass) {
   if (tauriInvoke) {
     return tauriInvoke("get_mean_temp_trend", {
