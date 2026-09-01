@@ -11,7 +11,7 @@ repo's mechanism), then return `development` to a `-test.N` dev version ready
 for the next iteration.
 
 This skill is **generic across the author's Rust repos** (RustyMealie,
-WeatherAnalysis, …). It decides how each repo publishes by inspecting the repo
+CorvallisWeather, …). It decides how each repo publishes by inspecting the repo
 during the READ phase, rather than assuming a single layout. Keep the
 "Per-repo notes" section up to date as the facts drift.
 
@@ -45,7 +45,7 @@ Then classify the repo on three axes:
      `main` must never happen.
    - *Manual*: no release workflow. Releasing = tagging `v<version>` and
      running `gh release create` (plus any post-release deploy step).
-3. **Post-release steps** (per-repo table below, e.g. WeatherAnalysis web
+3. **Post-release steps** (per-repo table below, e.g. CorvallisWeather web
    deploy; RustyMealie desktop bundles only via CI + local Android step).
 
 ## Version conventions
@@ -182,7 +182,7 @@ pull/combine before deploying so the server has current data.
 
 | Repo | Version source | Publish | Post-release |
 |---|---|---|---|
-| WeatherAnalysis | multi-crate: `pull_data`, `cleanup_data`, `plot_data/{data-core,server,src-tauri}` each own version + `Cargo.lock`; `pull_data` carries the `-test.N` suffix | manual — `gh release create v<version>`; no CI workflow | Web deploy of `plot_data/server`: `cargo build --release`, copy binary to `~/.local/bin/weather-plot-server`, `sudo systemctl restart weather-plot`; frontend-only changes = restart only. Serving at `http://bicknellfamily.duckdns.org/CorvallisWeather/` |
+| CorvallisWeather | multi-crate: `pull_data`, `cleanup_data`, `plot_data/{data-core,server,src-tauri}` each own version + `Cargo.lock`; `pull_data` carries the `-test.N` suffix | manual — `gh release create v<version>`; no CI workflow | Web deploy of `plot_data/server`: `cargo build --release`, copy binary to `~/.local/bin/weather-plot-server`, `sudo systemctl restart weather-plot`; frontend-only changes = restart only. Serving at `http://bicknellfamily.duckdns.org/CorvallisWeather/` |
 | RustyMealie | single `[workspace.package]` version in root `Cargo.toml`; display follows via `version.workspace`; `src-tauri/tauri.conf.json` version = release version | CI — `.github/workflows/release.yml` runs on push to `main`, gates on `test` in the version, builds desktop bundles (`.deb`, `.AppImage`), publishes GitHub Release `v<version>` | Desktop bundles ship via CI; Android APK is a manual local step (`cargo tauri android build --apk --debug`) |
 
 Add rows here for any new repo this skill is used against.

@@ -123,7 +123,7 @@ Initial release.
 - Vendored Plotly.js so the app needs no internet at runtime.
 - READMEs for the pipeline and the viewer.
 
-[Unreleased]: https://github.com/BobBicknell/WeatherAnalysis/compare/v0.2.2...HEAD
-[0.2.2]: https://github.com/BobBicknell/WeatherAnalysis/releases/tag/v0.2.2
-[0.2.1]: https://github.com/BobBicknell/WeatherAnalysis/releases/tag/v0.2.1
-[0.2.0]: https://github.com/BobBicknell/WeatherAnalysis/releases/tag/v0.2.0
+[Unreleased]: https://github.com/BobBicknell/CorvallisWeather/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/BobBicknell/CorvallisWeather/releases/tag/v0.2.2
+[0.2.1]: https://github.com/BobBicknell/CorvallisWeather/releases/tag/v0.2.1
+[0.2.0]: https://github.com/BobBicknell/CorvallisWeather/releases/tag/v0.2.0

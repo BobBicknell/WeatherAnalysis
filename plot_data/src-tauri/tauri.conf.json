@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Weather Data Explorer",
+        "title": "CorvallisWeather",
         "width": 1000,
         "height": 700,
         "url": "index.html"

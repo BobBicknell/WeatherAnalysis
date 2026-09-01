@@ -1,4 +1,4 @@
-# WeatherAnalysis
+# CorvallisWeather
 
 Historical daily weather for Oregon cities — Corvallis, Eugene, Salem —
 fetched from NOAA's Climate Data Online (CDO) API, combined into a single
